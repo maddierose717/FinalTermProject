@@ -1,0 +1,145 @@
+#! /usr/bin/perl -w
+
+#   cgilog.cgi          This scrript is in the public domain.
+#   Version 1.10   --   Dec.28.1997
+#   http://www.fin.ne.jp/~yokubota/
+#   Perl (release 4 or 5) script for Unix servers
+#   Written by Yo Kubota(yokubota@fin.ne.jp)
+
+#   Original script was written by W. Soldierer <hermes@all-yours.net>,
+#   author of the Digital Postcard Perl program.
+#   Free Digital postcards for your Web site:
+#   http://www.all-yours.net/postcard/
+
+#   Many thanks to Mr.Walter Soldierer (The auther of original script)
+#   and Mr.Hamada (who wrote helpful explanations of original script)
+
+# The aim of this script is to monitor visitor's behavior in your site.
+# It can record logs of both page-access and data-access. It saves 
+# date & time, the refering page or data name (ARGV[0]), the visitor's 
+# host name, their IP address, browser type, their proxy info, and the 
+# refering page (if any) to a log file on your server (default name is 
+# logfile.txt"). 
+# This file will be automatically mailed to your mailbox when log file is 
+# full. You can change the mailing interval according to your needs 
+# (default log file size is 50,000 bytes).
+
+# ----- BEGIN INSTALLATION INSTRUCTIONS -----
+#  - Save this script to a file cgilog.cgi
+#  - Cut installation instructions (optional)
+#  - Change the first script line, if your server's Perl executable
+#    is not located in /usr/local/bin/perl
+#  - Customize the settings below (*SETTINGS*)
+#    * Change e-mail address for $recipient
+#    * Set $max_size to your needs, if you want to have more or less
+#      than 50,000 bytes mailed to your mailbox each time.
+#    * Change path/filename for log file, if necessary
+#      (default = logfile.txt in your cgi directory)
+#  - Prepare empty log File (0 Byte text file, default name is logfile.txt).
+#  - ASCII-upload log file, cgilog.cgi and Binary-upload new.gif to your
+#    cgi directory (cgi-bin, cgi-local...)
+#    Make log file being able to read and write (chmod logfile.txt 666)
+#    Make cgilog.cgi executable (chmod mail-log.cgi 755)
+#  - add the following line to HTML soures to be logged.
+#    <IMG SRC="http://www.xxx..../..../cgilog.cgi?ARGV[0]">
+#    ARGV[0] is the saved names of a refering page or a data name.
+#  - change the data-links you want to be logged in HTML sources to 
+#    the following line.
+#    <A HREF="..../cgilog.cgi?ARGV[0]+ARGV[1]">.....</A>
+#    ARGV[1] is a data location address.
+#
+#    * ARGV[0] and ARGV[1] are very important.
+#      ARGV[0] becomes the recorded names of a refering page or a data name.
+#      ARGV[1] constructs a data location name with $url (refer to settings).
+#      If ARGV[1] dose not exist, the script regards a call as a page-access
+#      log. If exists, it regards a call as a data-access and generates 
+#      a data location name ($url+ARGV[1]).
+#
+#      For exsample, if you write ARGV[0] & ARGV[1] like this 
+#           <A HREF="..../cgilog.cgi?cgi/+cgitext/cgilog.txt">.....</A>
+#      and if you customize, 
+#           $url = "http://www.fin.ne.jp/~yokubota/";
+#      the generated data location name becomes 
+#          http://www.fin.ne.jp/~yokubota/cgitext/cgilog.txt
+#      and recoded data name becomes 
+#          cgi/cgitext/cgilog.cgi
+#
+#  - ASCII-upload HTML sources.
+#
+#  You can contact with me in my site's Guest Book or via Email.
+#
+# ----- END INSTALLATION INSTRUCTIONS -----
+
+$recipient = 'cjlin@csie.ntu.edu.tw';          # your mail address
+# $max_size = 50000;                          # entries number to mail
+$max_size = 5000;                          # entries number to mail
+$logfile = './libsvm.log';                 # log file name
+$totalfile = './libsvm.all';                 # total file name
+$mailprogam = '/usr/sbin/sendmail';          # send mail path (absolute)
+$url = "http://www.csie.ntu.edu.tw/~cjlin/";   # your url
+# $url = "";
+$gif_image = './new.gif';                   # gif file name
+
+#-----  Set up above to customize this script  ------------;
+
+$gif_size = (stat($gif_image))[7];
+
+# create a date+time string
+($sec,$min,$hour,$mday,$mon,$year,$wday)=localtime(time);
+$mon=$mon+1;
+if ($sec < 10) { $sec = "0$sec"; }
+if ($min < 10) { $min = "0$min"; }
+if ($hour < 10) { $hour = "0$hour"; }
+if ($mon < 10) { $mon = "0$mon"; }
+$wday = ('Sun','Mon','Tue','Wed','Thu','Fri','Sat')[$wday];
+$shortdate = "$year/$mon/$mday($wday)$hour:$min:$sec";
+
+# replace REMOTE_ADDR with HTTP_X_FORWARDED_FOR as 217 split www servers to two
+# Some of Perl's network info functions required here
+($part1,$part2,$part3,$part4)=split(/\./,$ENV{HTTP_X_FORWARDED_FOR});
+$IP_adr=pack("C4",$part1,$part2,$part3,$part4);
+($host_name)=(gethostbyaddr("$IP_adr", 2));
+
+if ($ARGV[2] eq "") {
+   $ARGV[2]  = "zip";
+}
+
+if ($ARGV[1] eq "") {
+    $| = 1;
+    print "Content-type: image/gif\n";
+    print "Content-length: $gif_size\n\n";
+    open GIF, $gif_image;
+    print <GIF>;
+    close GIF;
+} else {
+    $ARGV[1] =~ s/\\~/~/;
+    print "Location: $ARGV[1]/libsvm-3.3.$ARGV[2]\n\n";
+}
+
+# open log file for output and append new log data
+open (LOGFILE, "+<$logfile") || die "Can't open logfile!\n";  # open for read AND write
+# flock(LOGFILE, 2);                      # lock it
+$datelog = <LOGFILE>;                   # read date
+ if ((stat($logfile))[7] < $max_size) {  # log size over max size ?
+   seek(LOGFILE,0,2);                   # go to end of file
+} else {                                # truncate log file & send mail
+    seek(LOGFILE,0,0);                   # go to begin of file
+    @log = <LOGFILE>;                   # read log file
+    seek(LOGFILE,0,0);                   # go to begin of file
+    truncate (LOGFILE,0);               # empty the file
+    open (TOTALFILE, "+<$totalfile") ;
+    seek(TOTALFILE,0,2);                   # go to end of file
+    print TOTALFILE "@log\n";
+    close TOTALFILE;
+    open (MAIL, "|$mailprogam -t ") || die "Can't open $mailprogam!\n";
+    print MAIL "From: log-mail.cgi\n";  # send mail
+    print MAIL "To: $recipient\n";
+    print MAIL "Subject: Mail-log File\n\n";
+    print MAIL "@log\n";
+    close MAIL;
+}
+print LOGFILE "$shortdate,$ARGV[1]$ARGV[2],$host_name,$ENV{'HTTP_X_FORWARDED_FOR'},$ENV{'HTTP_USER_AGENT'},$ENV{'HTTP_VIA'},$ENV{'HTTP_X_FORWARDED_FOR'}\n";
+close LOGFILE;
+exit(0);
+# end of script
+
